@@ -391,9 +391,15 @@
     </block>
     
     <label text="Values"></label>
-    <block type="x_block"></block>
-    <block type="y_block"></block>
-    <block type="z_block"></block>
+    <block type="coord_block">
+      <field name="AXIS">X</field>
+    </block>
+    <block type="coord_block">
+      <field name="AXIS">Y</field>
+    </block>
+    <block type="coord_block">
+      <field name="AXIS">Z</field>
+    </block>
   </xml>
 
   <script>
@@ -409,12 +415,12 @@
           "message0": "G %1 %2",
           "args0": [
             { "type": "field_number", "name": "G_NUM", "value": 1, "min": 0, "max": 99, "precision": 1 },
-            { "type": "input_statement", "name": "COORDS" }
+            { "type": "input_value", "name": "COORDS", "check": "VALUE" }
           ],
-          "previousStatement": null,
-          "nextStatement": null,
+          "previousStatement": "GCODE",
+          "nextStatement": "GCODE",
           "colour": "#ECD883",
-          "tooltip": "G-code command. Attach X, Y, Z blocks inside."
+          "tooltip": "G-code command. Plug X, Y, Z values into the socket."
         },
         {
           "type": "m_block",
@@ -426,50 +432,41 @@
               "options": [ [ "54", "54" ], [ "55", "55" ] ]
             }
           ],
-          "previousStatement": null,
-          "nextStatement": null,
+          "previousStatement": "GCODE",
+          "nextStatement": "GCODE",
           "colour": "#E58672",
           "tooltip": "M-code command (M54 or M55)."
         },
         {
-          "type": "x_block",
-          "message0": "X %1",
-          "args0": [ { "type": "field_number", "name": "VAL", "value": 0 } ],
-          "previousStatement": null,
-          "nextStatement": null,
+          "type": "coord_block",
+          "message0": "%1 %2 %3",
+          "args0": [
+            {
+              "type": "field_dropdown",
+              "name": "AXIS",
+              "options": [ [ "X", "X" ], [ "Y", "Y" ], [ "Z", "Z" ] ]
+            },
+            { "type": "field_number", "name": "VAL", "value": 0 },
+            { "type": "input_value", "name": "NEXT", "check": "VALUE", "align": "RIGHT" }
+          ],
+          "output": "VALUE",
           "colour": "#6FC593",
-          "tooltip": "X coordinate."
+          "tooltip": "Coordinate value (X, Y, or Z)."
         },
-        {
-          "type": "y_block",
-          "message0": "Y %1",
-          "args0": [ { "type": "field_number", "name": "VAL", "value": 0 } ],
-          "previousStatement": null,
-          "nextStatement": null,
-          "colour": "#6FC593",
-          "tooltip": "Y coordinate."
-        },
-        {
-          "type": "z_block",
-          "message0": "Z %1",
-          "args0": [ { "type": "field_number", "name": "VAL", "value": 0 } ],
-          "previousStatement": null,
-          "nextStatement": null,
-          "colour": "#6FC593",
-          "tooltip": "Z coordinate."
-        }
       ]);
 
       jsGen['g_block'] = function(block) {
         var gNum = block.getFieldValue('G_NUM');
-        var coords = jsGen.statementToCode(block, 'COORDS');
-        var coordStr = coords.split('\n').map(s => s.trim()).filter(Boolean).join(' ');
-        return 'G' + gNum + (coordStr ? ' ' + coordStr : '') + '\n';
+        var coords = jsGen.valueToCode(block, 'COORDS', jsGen.ORDER_NONE) || '';
+        return 'G' + gNum + (coords ? ' ' + coords : '') + '\n';
       };
       jsGen['m_block'] = function(block) { return 'M' + block.getFieldValue('M_NUM') + '\n'; };
-      jsGen['x_block'] = function(block) { return 'X' + block.getFieldValue('VAL') + '\n'; };
-      jsGen['y_block'] = function(block) { return 'Y' + block.getFieldValue('VAL') + '\n'; };
-      jsGen['z_block'] = function(block) { return 'Z' + block.getFieldValue('VAL') + '\n'; };
+      jsGen['coord_block'] = function(block) {
+        var axis = block.getFieldValue('AXIS');
+        var val = axis + block.getFieldValue('VAL');
+        var next = jsGen.valueToCode(block, 'NEXT', jsGen.ORDER_NONE) || '';
+        return [val + (next ? ' ' + next : ''), jsGen.ORDER_ATOMIC];
+      };
 
       var isPhone = window.innerWidth <= 480;
 
@@ -551,9 +548,9 @@
           var coords = blockData.coords || [];
 
           // Extract coordinate values
-          var xCoord = coords.find(c => c.type === 'x_block');
-          var yCoord = coords.find(c => c.type === 'y_block');
-          var zCoord = coords.find(c => c.type === 'z_block');
+          var xCoord = coords.find(c => c.axis === 'X');
+          var yCoord = coords.find(c => c.axis === 'Y');
+          var zCoord = coords.find(c => c.axis === 'Z');
 
           // G28 - Home position
           if (gNum === '28') {
@@ -590,8 +587,7 @@
 
           // Fallback for other G codes
           var coordText = coords.map(c => {
-            var axis = c.type.replace('_block', '').toUpperCase();
-            return axis + c.value;
+            return c.axis + c.value;
           }).join(' ');
           return 'G' + gNum + (coordText ? ' ' + coordText : '');
 
@@ -626,14 +622,22 @@
 
           blockData.coords.forEach(function(coord, index) {
             var coordBlock = workspace.newBlock(coord.type);
+            if (coord.axis) {
+              coordBlock.setFieldValue(coord.axis, 'AXIS');
+            }
             coordBlock.setFieldValue(coord.value, 'VAL');
             coordBlock.initSvg();
             coordBlock.render();
 
             if (index === 0) {
-              coordInput.connection.connect(coordBlock.previousConnection);
+              // Connect first coord to the G-block's value input
+              coordInput.connection.connect(coordBlock.outputConnection);
             } else if (previousCoordBlock) {
-              previousCoordBlock.nextConnection.connect(coordBlock.previousConnection);
+              // Chain subsequent coords to the previous block's NEXT input
+              var nextInput = previousCoordBlock.getInput('NEXT');
+              if (nextInput && nextInput.connection) {
+                nextInput.connection.connect(coordBlock.outputConnection);
+              }
             }
             previousCoordBlock = coordBlock;
           });
@@ -674,9 +678,9 @@
 
         var defaultBlocks = [
           [{ type: 'g_block', value: '28' }],
-          [{ type: 'g_block', value: '1', coords: [{ type: 'x_block', value: '150' }, { type: 'y_block', value: '150' }] }],
+          [{ type: 'g_block', value: '1', coords: [{ type: 'coord_block', axis: 'X', value: '150' }, { type: 'coord_block', axis: 'Y', value: '150' }] }],
           [{ type: 'm_block', value: '55' }],
-          [{ type: 'g_block', value: '1', coords: [{ type: 'z_block', value: '100' }] }],
+          [{ type: 'g_block', value: '1', coords: [{ type: 'coord_block', axis: 'Z', value: '100' }] }],
           [{ type: 'm_block', value: '54' }],
           [{ type: 'g_block', value: '28' }],
           [{ type: 'm_block', value: '55' }]
@@ -719,9 +723,9 @@
         // The smaller text is procedurally generated from the gcode
         var tutorialSteps = [
           [{ type: 'g_block', value: '28' }, "Move To Home"],
-          [{ type: 'g_block', value: '1', coords: [{ type: 'x_block', value: '150' }, { type: 'y_block', value: '150' }] }, "Move to Position"],
+          [{ type: 'g_block', value: '1', coords: [{ type: 'coord_block', axis: 'X', value: '150' }, { type: 'coord_block', axis: 'Y', value: '150' }] }, "Move to Position"],
           [{ type: 'm_block', value: '55' }, "Disengage Claw"],
-          [{ type: 'g_block', value: '1', coords: [{ type: 'z_block', value: '100' }] }, "Lower the Claw"],
+          [{ type: 'g_block', value: '1', coords: [{ type: 'coord_block', axis: 'Z', value: '100' }] }, "Lower the Claw"],
           [{ type: 'm_block', value: '54' }, "Engage the Claw"],
           [[{ type: 'g_block', value: '28' }, { type: 'm_block', value: '55' }], "Move Back to Home and Disengage Claw"]
         ];
