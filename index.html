@@ -273,10 +273,78 @@
     }
 
     @media (max-width: 480px) {
-      .blocklyToolboxDiv, .blocklyFlyout { width: 140px !important; }
-      .blocklyFlyoutBackground { width: 140px !important; }
+      .blocklyFlyout.visible-flyout {
+        width: 140px !important;
+        transition: width 0.3s ease;
+      }
+      .blocklyFlyoutBackground {
+        width: 140px !important;
+        transition: width 0.3s ease;
+      }
       .fab { top: 12px; right: 12px; width: 46px; height: 46px; }
       .fab svg { width: 24px; height: 24px; }
+
+      /* Tray toggle button - only visible on mobile */
+      .tray-toggle {
+        position: fixed;
+        top: 10px;
+        left: 0;
+        width: 32px;
+        height: 32px;
+        background: var(--color-primary);
+        color: var(--color-primary-fg);
+        border: none;
+        border-radius: 0 6px 6px 0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1001;
+        box-shadow: 2px 0 8px rgba(30, 44, 56, 0.15);
+        transition: left 0.3s ease;
+      }
+
+      /* Initial slide-in animation matching tray animation */
+      .tray-toggle.slide-in {
+        animation: trayToggleSlideIn 0.5s ease-out 0.3s backwards;
+        transition: none !important;
+      }
+
+      @keyframes trayToggleSlideIn {
+        from { left: 0; }
+        to { left: var(--tray-width, 113px); }
+      }
+
+      .tray-toggle svg {
+        width: 20px;
+        height: 20px;
+        stroke: currentColor;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+        transition: transform 0.3s ease;
+      }
+
+      /* Shrunk state */
+      .blocklyFlyout.visible-flyout.shrunk {
+        width: 0 !important;
+      }
+
+      .blocklyFlyoutBackground.shrunk {
+        width: 0 !important;
+      }
+
+      .tray-toggle.shrunk svg {
+        transform: rotate(180deg);
+      }
+    }
+
+    /* Hide tray toggle on desktop */
+    @media (min-width: 481px) {
+      .tray-toggle {
+        display: none !important;
+      }
     }
   
     /* Custom tutorial overlay */
@@ -386,6 +454,12 @@
       <line x1="4" y1="12" x2="20" y2="12" />
       <line x1="8" y1="8" x2="16" y2="8" />
       <line x1="8" y1="16" x2="16" y2="16" />
+    </svg>
+  </button>
+
+  <button class="tray-toggle" id="trayToggle" title="Toggle Toolbox">
+    <svg viewBox="0 0 24 24">
+      <polyline points="15 18 9 12 15 6"></polyline>
     </svg>
   </button>
 
@@ -592,6 +666,114 @@
       qrFab.addEventListener('click', openModal);
       closeBtn.addEventListener('click', closeModal);
       qrModal.addEventListener('click', function(e) { if (e.target === qrModal) closeModal(); });
+
+      // Tray toggle for mobile
+      var trayToggle = document.getElementById('trayToggle');
+      var isTrayShrunk = false;
+      var initialAnimationDone = false;
+
+      function getTrayVisualWidth() {
+        var flyoutDiv = document.querySelector('.blocklyFlyout.visible-flyout');
+        if (!flyoutDiv) return 113; // fallback
+
+        var bg = flyoutDiv ? flyoutDiv.querySelector('.blocklyFlyoutBackground') : null;
+        if (!bg) return 113; // fallback
+
+        return Math.round(bg.getBoundingClientRect().width);
+      }
+
+      function updateTogglePosition() {
+        if (!trayToggle) return;
+
+        if (!isTrayShrunk) {
+          var width = getTrayVisualWidth();
+          trayToggle.style.setProperty('--tray-width', width + 'px');
+          trayToggle.style.left = width + 'px';
+        } else {
+          trayToggle.style.left = '0px';
+        }
+      }
+
+      trayToggle.addEventListener('click', function(e) {
+        e.stopPropagation();
+
+        var flyoutDiv = document.querySelector('.blocklyFlyout.visible-flyout');
+        var flyoutBg = flyoutDiv ? flyoutDiv.querySelector('.blocklyFlyoutBackground') : null;
+
+        isTrayShrunk = !isTrayShrunk;
+
+        if (isTrayShrunk) {
+          // Shrink the tray
+          if (flyoutDiv) flyoutDiv.classList.add('shrunk');
+          if (flyoutBg) flyoutBg.classList.add('shrunk');
+          trayToggle.classList.add('shrunk');
+          trayToggle.style.left = '0px';
+        } else {
+          // Expand the tray
+          if (flyoutDiv) flyoutDiv.classList.remove('shrunk');
+          if (flyoutBg) flyoutBg.classList.remove('shrunk');
+          trayToggle.classList.remove('shrunk');
+          var width = getTrayVisualWidth();
+          trayToggle.style.left = width + 'px';
+        }
+
+        // Resize Blockly to account for new tray width
+        Blockly.svgResize(workspace);
+      });
+
+      // Trigger initial slide-in animation synced with tray
+      function triggerInitialAnimation() {
+        if (initialAnimationDone) return;
+        initialAnimationDone = true;
+
+        var width = getTrayVisualWidth();
+        trayToggle.style.setProperty('--tray-width', width + 'px');
+        trayToggle.classList.add('slide-in');
+
+        // After animation completes, set inline style without transition
+        setTimeout(function() {
+          trayToggle.style.transition = 'none';
+          trayToggle.classList.remove('slide-in');
+          trayToggle.style.left = width + 'px';
+          // Force reflow then restore transition
+          trayToggle.offsetHeight;
+          trayToggle.style.transition = '';
+        }, 800); // 0.3s delay + 0.5s duration
+      }
+
+      // Watch for the visible-flyout class to be added (tray animation start)
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+            var target = mutation.target;
+            if (target.classList && target.classList.contains('visible-flyout')) {
+              triggerInitialAnimation();
+            }
+          }
+        });
+      });
+
+      // Observe all flyouts for class changes, and check if already visible
+      setTimeout(function() {
+        var flyouts = document.querySelectorAll('.blocklyFlyout');
+        var alreadyVisible = false;
+        flyouts.forEach(function(flyout) {
+          if (flyout.classList.contains('visible-flyout')) {
+            alreadyVisible = true;
+          }
+          observer.observe(flyout, { attributes: true, attributeFilter: ['class'] });
+        });
+        if (alreadyVisible) {
+          triggerInitialAnimation();
+        }
+      }, 100);
+
+      // Update button position on window resize
+      window.addEventListener('resize', function() {
+        if (!isTrayShrunk) {
+          setTimeout(updateTogglePosition, 100);
+        }
+      });
 
       // Determine whether to show tutorial or load default blocks
       toTutorialOrNotToTutorial();
