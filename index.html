@@ -16,7 +16,7 @@
   
   <!-- QR Code Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.9.2/lib/qr-code-styling.js"></script>
 
   <!-- Driver.js for Tutorial -->
   <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js"></script>
@@ -520,51 +520,10 @@
             dotsOptions: { color: "#696aad", type: "rounded" },
             backgroundOptions: { color: "#efeddc" },
             cornersSquareOptions: { color: "#696aad", type: "extra-rounded" },
-            cornersDotOptions: { color: "#696aad", type: "square" } // Initial square base
+            cornersDotOptions: { color: "#696aad", type: "extra-rounded" }
           });
-          
+
           qrCode.append(qrContainer);
-
-          // Post-process the canvas to fix the inner dot corners
-          setTimeout(() => {
-            const canvas = qrContainer.querySelector('canvas');
-            if (!canvas) return;
-
-            const ctx = canvas.getContext('2d');
-            const cellSize = canvas.width / count;
-
-            // Locations of the inner 3x3 squares (row, col starting at 2)
-            const innerSquares = [
-              { x: 2, y: 2 },
-              { x: count - 5, y: 2 },
-              { x: 2, y: count - 5 }
-            ];
-
-            innerSquares.forEach(sq => {
-              const x = sq.x * cellSize;
-              const y = sq.y * cellSize;
-              const w = 3 * cellSize;
-
-              // 1. Erase the sharp square with a background-colored soft square
-              const erasePadding = cellSize * 0.15;
-              ctx.fillStyle = "#efeddc";
-              ctx.beginPath();
-              ctx.roundRect(
-                x - erasePadding, 
-                y - erasePadding, 
-                w + erasePadding * 2, 
-                w + erasePadding * 2, 
-                cellSize * 0.8
-              );
-              ctx.fill();
-
-              // 2. Draw the new purple squarish-but-soft dot
-              ctx.fillStyle = "#696aad";
-              ctx.beginPath();
-              ctx.roundRect(x, y, w, w, cellSize * 0.8);
-              ctx.fill();
-            });
-          }, 50); 
 
         } catch (e) {
           console.error(e);
