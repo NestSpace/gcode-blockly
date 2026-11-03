@@ -349,6 +349,30 @@
         font-size: 11px;
       }
     }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #E58672;
+      color: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      font-size: 14px;
+      font-weight: 700;
+      z-index: 3000;
+      opacity: 0;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
 </style>
 </head>
 <body>
@@ -374,6 +398,8 @@
       <div id="qrcode"></div>
     </div>
   </div>
+
+  <div class="toast" id="errorToast">Invalid G-Code</div>
 
   <div id="blocklyDiv"></div>
 
@@ -494,6 +520,26 @@
       var qrContainer = document.getElementById('qrcode');
 
       function openModal() {
+        // Check for multiple block trees (blocks without previous connections)
+        var allBlocks = workspace.getTopBlocks(false);
+        var treeCount = 0;
+
+        // Count all top-level blocks (including those connected to G/M blocks)
+        workspace.getAllBlocks().forEach(function(block) {
+          // A block is a "tree root" if it has no previous connection or its previous connection is not connected
+          if (block.type === 'g_block' || block.type === 'm_block') {
+            if (!block.previousConnection || !block.previousConnection.targetConnection) {
+              treeCount++;
+            }
+          }
+        });
+
+        // Show error if more than one tree
+        if (treeCount > 1) {
+          showToast('Invalid G-Code: Only One Command Chain Allowed');
+          return;
+        }
+
         qrModal.classList.add('active');
         qrContainer.innerHTML = '';
         var code = "";
@@ -504,7 +550,7 @@
 
         try {
           if (typeof QRCodeStyling === 'undefined') throw new Error("QRCodeStyling library not loaded.");
-          
+
           // Get exact matrix size
           var qr = qrcode(0, 'M');
           qr.addData(code);
@@ -533,6 +579,15 @@
       }
 
       function closeModal() { qrModal.classList.remove('active'); }
+
+      function showToast(message) {
+        var toast = document.getElementById('errorToast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(function() {
+          toast.classList.remove('show');
+        }, 3000);
+      }
 
       qrFab.addEventListener('click', openModal);
       closeBtn.addEventListener('click', closeModal);
