@@ -156,6 +156,7 @@
       font-weight: 700;
       margin: 0;
       color: var(--color-primary-fg);
+      user-select: none;
     }
 
     .close-btn {
@@ -170,6 +171,7 @@
       align-items: center;
       justify-content: center;
       transition: opacity 0.15s ease;
+      user-select: none;
     }
 
     .close-btn:hover { opacity: 0.7; }
@@ -364,7 +366,7 @@
   <div class="modal-overlay" id="qrModal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 class="modal-title">Scan to run it</h2>
+        <h2 class="modal-title">Scan to Run</h2>
         <button class="close-btn" id="closeModal">&times;</button>
       </div>
       <div id="qrcode"></div>
